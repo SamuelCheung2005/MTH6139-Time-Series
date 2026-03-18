@@ -1,0 +1,95 @@
+---
+title: "MTH6139 Time Series" 
+subtitle: "Coursework 1 -- 230071205" 
+author: "Samuel Cheung" 
+date: "Spring term 2026" 
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab 
+    highlight: tango
+---
+ 
+```{r, echo=FALSE}
+# This code will display the QMUL logo at the top right of the page
+# Do not change this code
+htmltools::img(src = knitr::image_uri("images/QMlogo.png"),
+               alt = 'logo',
+               style = 'position:absolute; top:0; right:0; padding:10px; width:20%;')
+```
+
+# 1 Introduction
+> In this project I will explore the UK exchange rate index dataset from the stevedata library. The dataset gives daily observations on the value of the pound sterling between 1 Jan 1990 to 30 Dec 2022. The monthly average of January 2005 is the base index (100) of the dataset. 
+
+## 1.1 The purpose of the project
+> The purpose of this project is to analyse trends and seasonality of the dataset, and use Meta's Prophet forecasting system to predict future exchange rates.
+
+## 1.2 The time series graph
+
+```{r}
+plot(stevedata::ukg_eeri, type = "l", xlab = "Year", ylab = "GBP Exchange rate index", main="GBP Exchange rate index over time")
+#Black Wednesday
+abline(v = as.Date("1992-09-16"), col = "red", lty="dashed")
+#2008 Financial Crash (Lehman Brothers Collapse)
+abline(v = as.Date("2008-09-15"), col = "red", lty="dashed")
+#Brexit referendum
+abline(v = as.Date("2016-06-23"), col = "red", lty="dashed")
+#Linear Regression
+model = lm(stevedata::ukg_eeri$value ~ time(stevedata::ukg_eeri$date))
+lines(stevedata::ukg_eeri$date, fitted(model), col="green")
+```
+
+> Here we can see how the exchange rate changes over time. After the 1992 Black Wednesday, the exchange rate experienced a huge drop before recovering again in the late 1990s. Then the 2008 recession caused the exchange rate index to drop below 75. It then gradually started to recover before falling yet again in 2016 where it has not yet recovered. The linear regression line shows a downward trend in exchange rates.
+
+## 1.3 Decomposition
+```{r}
+#Brockwell Davis decomposition
+decomposed = decompose(ts(stevedata::ukg_eeri$value, frequency = 253))
+plot(decomposed)
+```
+
+> Here i use the inbuilt decompose function which splits the time series into 3 components (trend, seasonality, residuals). I used a frequency of 253 as there are approximately 252-253 business days in a year. (8340 data points in 33 years) This may lead to some data being inaccurately represented but it shouldn't affect the final results too much.
+
+```{r}
+plot(decomposed$seasonal[1:253], type = "l", ylab = "Seasonal", main= "Seasonal component of the UK Exchange Rate Index")
+abline(v=c(1,23,43,65,84,105,126,148,170,190,213,235), col="red", lty="dashed")
+```
+
+> Here I show the first year of the seasonal component, as it is repeated every 253 times. I used the index of the first business days of each month in 1990 as an estimate for all the years to split graph into 12 months.  
+> We can see the exchange rate is weakest during March, and strongest between April-July, but the size of this is very small: it ranges from about -0.6 to +0.4 index
+
+# 2 Meta’s Prophet forecasting system
+```{r}
+library(prophet)
+#prophet requires a dataframe with time column ds and data column y 
+ukg_dataframe = data.frame(ds = stevedata::ukg_eeri$date, y = stevedata::ukg_eeri$value)
+#set up model with parameters
+#there is no daily/weekly seasonality in exchange rates so I opted to turn them false
+model = prophet(ukg_dataframe, weekly.seasonality = FALSE, daily.seasonality = FALSE)
+#create a dataframe with 4 years of dates for forecasting
+future_4_years = make_future_dataframe(model, 365*4+1)
+#forecasts likely exchange rate values for the next 4 years  
+forecast = predict(model, future_4_years)
+plot(model, forecast)
+```
+
+>Using Prophet's forecasting system, it predicts that the exchange rate will most likely remain stable for the next 4 years. As we can see from the plot, the variation increases with time.
+
+```{r, warning=FALSE}
+#prophet's decomposition
+prophet_plot_components(model, forecast)
+tail(forecast[, c("ds","yhat","yhat_lower","yhat_upper")],1)
+```
+
+>As you can see prophet expects the exchange rate to remain stable between 2022-26 but with high variation, probably because the exchange rate experienced sudden huge fluctuations in the past. Similarly to section 1.3, Prophet also shows a small seasonality trend, lowest before april and highest in the summer.
+The range of values ranging from 33.4-119.7 shows there is high uncertainty in the exchange rate market 
+
+# 3 Conclusion
+
+>Exchange rates can be highly unpredictable, with no clear pattern. Hence Meta's Prophet forecasting system is unable to reliably predict long term outcomes. 
+
+# References
+
+- stevedata: <https://svmiller.com/stevedata/>
+- prophet: <https://facebook.github.io/prophet/docs/quick_start.html#r-api>
